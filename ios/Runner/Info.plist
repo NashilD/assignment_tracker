@@ -45,5 +45,9 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Assignment Tracker adds your assignment due dates to your calendar.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Assignment Tracker adds your assignment due dates to your calendar.</string>
 </dict>
 </plist>

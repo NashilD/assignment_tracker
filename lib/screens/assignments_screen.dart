@@ -1,6 +1,7 @@
 import 'package:assignment_tracker/models/models.dart';
 import 'package:assignment_tracker/screens/assignment_detail_screen.dart';
 import 'package:assignment_tracker/services/calendar_service.dart';
+import 'package:assignment_tracker/services/notification_service.dart';
 import 'package:assignment_tracker/services/storage_service.dart';
 import 'package:assignment_tracker/widgets/assignment_card.dart';
 import 'package:flutter/material.dart';
@@ -9,11 +10,13 @@ import 'package:flutter/material.dart';
 class AssignmentsScreen extends StatefulWidget {
   final StorageService storageService;
   final CalendarService calendarService;
+  final NotificationService notificationService;
 
   const AssignmentsScreen({
     super.key,
     required this.storageService,
     required this.calendarService,
+    required this.notificationService,
   });
 
   @override
@@ -22,6 +25,7 @@ class AssignmentsScreen extends StatefulWidget {
 
 class _AssignmentsScreenState extends State<AssignmentsScreen> {
   late List<Assignment> _assignments = [];
+  Map<String, Color> _courseColors = {};
   bool _isLoading = true;
 
   @override
@@ -34,6 +38,7 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> {
     setState(() => _isLoading = true);
     try {
       final assignments = await widget.storageService.getAssignments();
+      final courses = await widget.storageService.getCourses();
       // Filter out Done status assignments
       final active =
           assignments.where((a) => a.status != AssignmentStatus.done).toList();
@@ -42,6 +47,7 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> {
 
       setState(() {
         _assignments = active;
+        _courseColors = {for (final c in courses) c.id: c.color};
       });
     } catch (e) {
       // Error loading assignments
@@ -56,6 +62,7 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> {
         builder: (context) => AssignmentDetailScreen(
           storageService: widget.storageService,
           calendarService: widget.calendarService,
+          notificationService: widget.notificationService,
         ),
       ),
     );
@@ -71,6 +78,7 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> {
         builder: (context) => AssignmentDetailScreen(
           storageService: widget.storageService,
           calendarService: widget.calendarService,
+          notificationService: widget.notificationService,
           assignment: assignment,
         ),
       ),
@@ -78,6 +86,48 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> {
 
     if (result != null) {
       await _loadAssignments();
+    }
+  }
+
+  Future<void> _changeStatus(
+    Assignment assignment,
+    AssignmentStatus status,
+  ) async {
+    if (status == assignment.status) return;
+
+    final updated = assignment.copyWith(status: status);
+    try {
+      if (status == AssignmentStatus.done) {
+        // Done assignments live in History and no longer need a calendar event
+        // or reminders.
+        if (assignment.calendarEventId != null) {
+          await widget.calendarService
+              .deleteEvent(assignment.calendarEventId!);
+        }
+        await widget.notificationService.cancelForAssignmentId(assignment.id);
+        await widget.storageService.moveToHistory(updated);
+      } else {
+        await widget.storageService.saveAssignment(updated);
+      }
+      await _loadAssignments();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              status == AssignmentStatus.done
+                  ? '"${assignment.title}" moved to History'
+                  : 'Status set to ${status.displayName}',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not update status')),
+        );
+      }
     }
   }
 
@@ -105,6 +155,7 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> {
       if (assignment.calendarEventId != null) {
         await widget.calendarService.deleteEvent(assignment.calendarEventId!);
       }
+      await widget.notificationService.cancelForAssignmentId(assignment.id);
 
       await widget.storageService.deleteAssignment(assignment.id);
       await _loadAssignments();
@@ -127,31 +178,10 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _assignments.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.assignment,
-                        size: 64,
-                        color: Colors.grey.shade400,
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'No assignments yet',
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              color: Colors.grey.shade600,
-                            ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Add an assignment to get started',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: Colors.grey.shade500,
-                            ),
-                      ),
-                    ],
-                  ),
+              ? const EmptyState(
+                  icon: Icons.assignment_outlined,
+                  title: 'No assignments yet',
+                  subtitle: 'Add an assignment to get started',
                 )
               : ListView.builder(
                   padding: const EdgeInsets.symmetric(vertical: 8),
@@ -160,8 +190,11 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> {
                     final assignment = _assignments[index];
                     return AssignmentCard(
                       assignment: assignment,
+                      accentColor: _courseColors[assignment.courseId],
                       onEdit: () => _editAssignment(assignment),
                       onDelete: () => _deleteAssignment(assignment),
+                      onStatusChanged: (status) =>
+                          _changeStatus(assignment, status),
                     );
                   },
                 ),

@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:assignment_tracker/models/models.dart';
 import 'package:assignment_tracker/screens/assignments_screen.dart';
 import 'package:assignment_tracker/screens/history_screen.dart';
 import 'package:assignment_tracker/screens/settings_screen.dart';
 import 'package:assignment_tracker/services/calendar_service.dart';
+import 'package:assignment_tracker/services/notification_service.dart';
 import 'package:assignment_tracker/services/storage_service.dart';
 import 'package:assignment_tracker/theme/app_theme.dart';
 import 'package:flutter/material.dart';
@@ -22,6 +25,7 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> {
   late StorageService _storageService;
   late CalendarService _calendarService;
+  final NotificationService _notificationService = NotificationService();
   ThemeMode _themeMode = ThemeMode.system;
   bool _isInitialized = false;
 
@@ -34,7 +38,7 @@ class _MyAppState extends State<MyApp> {
   Future<void> _initializeServices() async {
     try {
       _storageService = await StorageService.create();
-      _calendarService = CalendarService();
+      _calendarService = CalendarService(_storageService);
 
       // Initialize calendar service (non-blocking)
       _calendarService.initialize().catchError((_) {
@@ -42,10 +46,29 @@ class _MyAppState extends State<MyApp> {
         return false;
       });
 
+      // Set up reminders (non-blocking, best effort).
+      unawaited(_setUpReminders());
+
       setState(() => _isInitialized = true);
     } catch (e) {
       // Error initializing services, app continues with minimal functionality
       setState(() => _isInitialized = true);
+    }
+  }
+
+  /// Ask for notification permission and (re)schedule reminders for every
+  /// active assignment, so they survive reinstalls and clock changes.
+  Future<void> _setUpReminders() async {
+    try {
+      await _notificationService.initialize();
+      final assignments = await _storageService.getAssignments();
+      for (final assignment in assignments) {
+        if (assignment.status != AssignmentStatus.done) {
+          await _notificationService.scheduleForAssignment(assignment);
+        }
+      }
+    } catch (e) {
+      debugPrint('Reminder setup skipped: $e');
     }
   }
 
@@ -70,6 +93,7 @@ class _MyAppState extends State<MyApp> {
       home: Home(
         storageService: _storageService,
         calendarService: _calendarService,
+        notificationService: _notificationService,
         onThemeChanged: (theme) {
           setState(() => _themeMode = theme);
         },
@@ -81,12 +105,14 @@ class _MyAppState extends State<MyApp> {
 class Home extends StatefulWidget {
   final StorageService storageService;
   final CalendarService calendarService;
+  final NotificationService notificationService;
   final ValueChanged<ThemeMode> onThemeChanged;
 
   const Home({
     super.key,
     required this.storageService,
     required this.calendarService,
+    required this.notificationService,
     required this.onThemeChanged,
   });
 
@@ -108,6 +134,12 @@ class _HomeState extends State<Home> {
       final assignments = await widget.storageService.getAssignments();
       for (final assignment in assignments) {
         if (assignment.status == AssignmentStatus.done) {
+          if (assignment.calendarEventId != null) {
+            await widget.calendarService
+                .deleteEvent(assignment.calendarEventId!);
+          }
+          await widget.notificationService
+              .cancelForAssignmentId(assignment.id);
           await widget.storageService.moveToHistory(assignment);
         }
       }
@@ -122,9 +154,12 @@ class _HomeState extends State<Home> {
       AssignmentsScreen(
         storageService: widget.storageService,
         calendarService: widget.calendarService,
+        notificationService: widget.notificationService,
       ),
       HistoryScreen(
         storageService: widget.storageService,
+        calendarService: widget.calendarService,
+        notificationService: widget.notificationService,
       ),
       SettingsScreen(
         storageService: widget.storageService,

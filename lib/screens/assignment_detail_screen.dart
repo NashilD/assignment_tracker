@@ -1,5 +1,6 @@
 import 'package:assignment_tracker/models/models.dart';
 import 'package:assignment_tracker/services/calendar_service.dart';
+import 'package:assignment_tracker/services/notification_service.dart';
 import 'package:assignment_tracker/services/storage_service.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -9,12 +10,14 @@ import 'package:uuid/uuid.dart';
 class AssignmentDetailScreen extends StatefulWidget {
   final StorageService storageService;
   final CalendarService calendarService;
+  final NotificationService notificationService;
   final Assignment? assignment;
 
   const AssignmentDetailScreen({
     super.key,
     required this.storageService,
     required this.calendarService,
+    required this.notificationService,
     this.assignment,
   });
 
@@ -113,32 +116,53 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
       // Save to storage
       await widget.storageService.saveAssignment(updatedAssignment);
 
-      // Sync to calendar if due date is set
-      if (_selectedDueDate != null) {
+      // (Re)schedule 5/3/2/1-day reminders (or clear them if done / no date).
+      await widget.notificationService.scheduleForAssignment(updatedAssignment);
+
+      // Sync to calendar. A calendar failure must not block saving, so it is
+      // handled separately and only surfaces as a warning.
+      String? calendarWarning;
+      try {
         final eventId = await widget.calendarService
             .syncAssignmentToCalendar(updatedAssignment);
 
-        if (eventId != null) {
-          final syncedAssignment = updatedAssignment.copyWith(
-            calendarEventId: eventId,
-            hasCalendarEvent: true,
-          );
-          await widget.storageService.saveAssignment(syncedAssignment);
+        final synced = updatedAssignment.copyWith(
+          calendarEventId: eventId,
+          hasCalendarEvent: eventId != null,
+        );
+        await widget.storageService.saveAssignment(synced);
+
+        if (_selectedDueDate != null &&
+            _selectedStatus != AssignmentStatus.done &&
+            eventId == null) {
+          calendarWarning =
+              'Saved, but could not add it to your calendar. Check the '
+              'calendar permission and the Calendar Email in Settings.';
         }
+      } catch (e) {
+        debugPrint('Calendar sync failed: $e');
+        calendarWarning = 'Saved, but calendar sync failed.';
       }
 
       if (mounted) {
+        if (calendarWarning != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(calendarWarning)),
+          );
+        }
         Navigator.pop(context, updatedAssignment);
       }
     } catch (e) {
-      print('Error saving assignment: $e');
+      debugPrint('Error saving assignment: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error saving assignment: $e')),
         );
       }
     } finally {
-      setState(() => _isSaving = false);
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
     }
   }
 

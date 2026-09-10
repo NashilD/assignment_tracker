@@ -2,12 +2,15 @@ import 'package:assignment_tracker/models/models.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-/// A modern card widget displaying assignment information
+/// A modern card widget displaying assignment information.
 class AssignmentCard extends StatelessWidget {
   final Assignment assignment;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
-  final VoidCallback? onStatusChanged;
+  final ValueChanged<AssignmentStatus>? onStatusChanged;
+
+  /// Colour of the assignment's course, used as a subtle accent.
+  final Color? accentColor;
 
   const AssignmentCard({
     super.key,
@@ -15,49 +18,34 @@ class AssignmentCard extends StatelessWidget {
     required this.onEdit,
     required this.onDelete,
     this.onStatusChanged,
+    this.accentColor,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final accent = accentColor ?? colorScheme.primary;
 
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       child: InkWell(
         onTap: onEdit,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header: Course name and actions
+              // Header: course name and actions
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  // Course badge
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: assignment.courseName != 'Unknown'
-                          ? Colors.grey.shade300
-                          : Colors.grey.shade300,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      assignment.courseName,
-                      style: theme.textTheme.labelLarge?.copyWith(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                  Flexible(
+                    child: _CourseChip(name: assignment.courseName, accent: accent),
                   ),
-                  // Actions menu
                   PopupMenuButton<String>(
+                    tooltip: 'More',
                     onSelected: (value) {
                       if (value == 'edit') {
                         onEdit();
@@ -65,22 +53,22 @@ class AssignmentCard extends StatelessWidget {
                         onDelete();
                       }
                     },
-                    itemBuilder: (BuildContext context) => [
-                      const PopupMenuItem(
+                    itemBuilder: (context) => const [
+                      PopupMenuItem(
                         value: 'edit',
                         child: Row(
                           children: [
-                            Icon(Icons.edit),
+                            Icon(Icons.edit_outlined),
                             SizedBox(width: 8),
                             Text('Edit'),
                           ],
                         ),
                       ),
-                      const PopupMenuItem(
+                      PopupMenuItem(
                         value: 'delete',
                         child: Row(
                           children: [
-                            Icon(Icons.delete),
+                            Icon(Icons.delete_outline),
                             SizedBox(width: 8),
                             Text('Delete'),
                           ],
@@ -90,71 +78,71 @@ class AssignmentCard extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
-
-              // Assignment title
-              Text(
-                assignment.title,
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
               const SizedBox(height: 8),
 
-              // Description
               Text(
-                assignment.description,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: colorScheme.onSurface.withValues(alpha: 0.7),
+                assignment.title,
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
                 ),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
+              if (assignment.description.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  assignment.description,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
               const SizedBox(height: 12),
 
-              // Due date and days remaining
+              // Due date and days-remaining badge
               Row(
                 children: [
-                  Icon(Icons.calendar_today,
-                      size: 16,
-                      color: colorScheme.onSurface.withValues(alpha: 0.7)),
+                  Icon(
+                    Icons.calendar_today_outlined,
+                    size: 16,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
                   const SizedBox(width: 8),
-                  if (assignment.dueDate != null)
-                    Text(
-                      DateFormat('MMM dd, yyyy').format(assignment.dueDate!),
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onSurface.withValues(alpha: 0.7),
-                      ),
-                    )
-                  else
-                    Text(
-                      'No due date',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onSurface.withValues(alpha: 0.7),
-                      ),
+                  Text(
+                    assignment.dueDate != null
+                        ? DateFormat('MMM dd, yyyy').format(assignment.dueDate!)
+                        : 'No due date',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
                     ),
+                  ),
                   const Spacer(),
-                  // Days remaining badge
                   if (assignment.dueDate != null)
                     _DaysRemainingBadge(assignment: assignment),
                 ],
               ),
               const SizedBox(height: 12),
 
-              // Status badge and actions
+              // Status control + calendar indicator
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  StatusBadge(status: assignment.status),
+                  if (onStatusChanged != null)
+                    StatusSelector(
+                      status: assignment.status,
+                      onChanged: onStatusChanged!,
+                    )
+                  else
+                    StatusBadge(status: assignment.status),
                   if (assignment.hasCalendarEvent)
                     Tooltip(
                       message: 'Synced to calendar',
                       child: Icon(
-                        Icons.check_circle,
+                        Icons.event_available,
                         size: 20,
-                        color: Colors.green.shade600,
+                        color: colorScheme.primary,
                       ),
                     ),
                 ],
@@ -167,7 +155,54 @@ class AssignmentCard extends StatelessWidget {
   }
 }
 
-/// Widget displaying days remaining until due date
+/// Rounded course label with a coloured dot; text stays on-surface so it is
+/// always readable regardless of the course colour or theme.
+class _CourseChip extends StatelessWidget {
+  final String name;
+  final Color accent;
+
+  const _CourseChip({required this.name, required this.accent});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Color.alphaBlend(
+          accent.withValues(alpha: 0.14),
+          theme.colorScheme.surface,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: accent.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(color: accent, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              name.isEmpty ? 'No course' : name,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelLarge?.copyWith(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: theme.colorScheme.onSurface,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Widget displaying days remaining until the due date.
 class _DaysRemainingBadge extends StatelessWidget {
   final Assignment assignment;
 
@@ -176,44 +211,29 @@ class _DaysRemainingBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final daysRemaining = assignment.daysRemaining;
-    final isOverdue = assignment.isOverdue;
-    final isDueToday = assignment.isDueToday;
 
-    Color badgeColor;
-    String text;
+    late final Color accent;
+    late final String text;
 
-    if (isOverdue) {
-      badgeColor = Colors.red.shade100;
+    if (assignment.isOverdue) {
+      accent = const Color(0xFFE5544B);
       text = 'Overdue';
-    } else if (isDueToday) {
-      badgeColor = Colors.orange.shade100;
-      text = 'Due Today';
+    } else if (assignment.isDueToday) {
+      accent = const Color(0xFFE08A2E);
+      text = 'Due today';
     } else if (daysRemaining <= 3) {
-      badgeColor = Colors.orange.shade100;
+      accent = const Color(0xFFE08A2E);
       text = '$daysRemaining day${daysRemaining == 1 ? '' : 's'}';
     } else {
-      badgeColor = Colors.green.shade100;
+      accent = const Color(0xFF3FA46A);
       text = '$daysRemaining days';
     }
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: badgeColor,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        text,
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: isOverdue ? Colors.red.shade700 : Colors.orange.shade700,
-              fontWeight: FontWeight.w600,
-            ),
-      ),
-    );
+    return _Pill(accent: accent, text: text);
   }
 }
 
-/// Status badge showing assignment status
+/// Static status badge (used where the status is not editable).
 class StatusBadge extends StatelessWidget {
   final AssignmentStatus status;
 
@@ -221,84 +241,195 @@ class StatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return _Pill(
+      accent: status.color,
+      text: status.displayName,
+      icon: status.icon,
+    );
+  }
+}
+
+/// Tappable status badge that lets the user change an assignment's status
+/// (Not Started / In Progress / Done) directly from the list.
+class StatusSelector extends StatelessWidget {
+  final AssignmentStatus status;
+  final ValueChanged<AssignmentStatus> onChanged;
+
+  const StatusSelector({
+    super.key,
+    required this.status,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<AssignmentStatus>(
+      tooltip: 'Change status',
+      initialValue: status,
+      onSelected: onChanged,
+      itemBuilder: (context) => AssignmentStatus.values
+          .map(
+            (s) => PopupMenuItem<AssignmentStatus>(
+              value: s,
+              child: Row(
+                children: [
+                  Icon(s.icon, size: 18, color: s.color),
+                  const SizedBox(width: 8),
+                  Text(s.displayName),
+                  if (s == status) ...[
+                    const Spacer(),
+                    const Icon(Icons.check, size: 16),
+                  ],
+                ],
+              ),
+            ),
+          )
+          .toList(),
+      child: _Pill(
+        accent: status.color,
+        text: status.displayName,
+        icon: status.icon,
+        trailing: Icons.arrow_drop_down,
+      ),
+    );
+  }
+}
+
+/// Shared translucent pill used for status and due-date badges. The fill is the
+/// accent hue blended onto the surface, so it reads in both light and dark.
+class _Pill extends StatelessWidget {
+  final Color accent;
+  final String text;
+  final IconData? icon;
+  final IconData? trailing;
+
+  const _Pill({
+    required this.accent,
+    required this.text,
+    this.icon,
+    this.trailing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: EdgeInsets.only(
+        left: icon != null ? 8 : 12,
+        right: trailing != null ? 4 : 12,
+        top: 6,
+        bottom: 6,
+      ),
       decoration: BoxDecoration(
-        color: status.color.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: status.color.withValues(alpha: 0.5),
+        color: Color.alphaBlend(
+          accent.withValues(alpha: 0.16),
+          theme.colorScheme.surface,
         ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: accent.withValues(alpha: 0.45)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            status.icon,
-            size: 16,
-            color: status.color,
-          ),
-          const SizedBox(width: 6),
+          if (icon != null) ...[
+            Icon(icon, size: 15, color: accent),
+            const SizedBox(width: 6),
+          ],
           Text(
-            status.displayName,
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: status.color,
-                  fontWeight: FontWeight.w600,
-                ),
+            text,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: accent,
+              fontWeight: FontWeight.w700,
+            ),
           ),
+          if (trailing != null) Icon(trailing, size: 18, color: accent),
         ],
       ),
     );
   }
 }
 
-/// History card showing completed assignment
+/// Centered icon + message shown when a list has no items.
+class EmptyState extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+
+  const EmptyState({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 64, color: theme.colorScheme.onSurfaceVariant),
+            const SizedBox(height: 16),
+            Text(
+              title,
+              style: theme.textTheme.titleLarge?.copyWith(
+                color: theme.colorScheme.onSurface,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              subtitle,
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// History card showing a completed assignment.
 class HistoryCard extends StatelessWidget {
   final Assignment assignment;
   final VoidCallback onDelete;
   final VoidCallback? onRestore;
+  final Color? accentColor;
 
   const HistoryCard({
     super.key,
     required this.assignment,
     required this.onDelete,
     this.onRestore,
+    this.accentColor,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final accent = accentColor ?? colorScheme.primary;
 
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    assignment.courseName,
-                    style: theme.textTheme.labelLarge?.copyWith(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+                Flexible(
+                  child: _CourseChip(name: assignment.courseName, accent: accent),
                 ),
                 PopupMenuButton<String>(
+                  tooltip: 'More',
                   onSelected: (value) {
                     if (value == 'delete') {
                       onDelete();
@@ -306,8 +437,8 @@ class HistoryCard extends StatelessWidget {
                       onRestore?.call();
                     }
                   },
-                  itemBuilder: (BuildContext context) => [
-                    const PopupMenuItem(
+                  itemBuilder: (context) => const [
+                    PopupMenuItem(
                       value: 'restore',
                       child: Row(
                         children: [
@@ -317,11 +448,11 @@ class HistoryCard extends StatelessWidget {
                         ],
                       ),
                     ),
-                    const PopupMenuItem(
+                    PopupMenuItem(
                       value: 'delete',
                       child: Row(
                         children: [
-                          Icon(Icons.delete),
+                          Icon(Icons.delete_outline),
                           SizedBox(width: 8),
                           Text('Delete'),
                         ],
@@ -331,31 +462,31 @@ class HistoryCard extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
 
-            // Title
             Text(
               assignment.title,
-              style: theme.textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w600,
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w700,
                 decoration: TextDecoration.lineThrough,
+                color: colorScheme.onSurfaceVariant,
               ),
             ),
             const SizedBox(height: 12),
 
-            // Completion info
             Row(
               children: [
                 Icon(Icons.check_circle,
-                    size: 16, color: Colors.green.shade600),
+                    size: 16, color: const Color(0xFF3FA46A)),
                 const SizedBox(width: 8),
-                if (assignment.completedAt != null)
-                  Text(
-                    'Completed: ${DateFormat('MMM dd, yyyy').format(assignment.completedAt!)}',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: colorScheme.onSurface.withValues(alpha: 0.7),
-                    ),
+                Text(
+                  assignment.completedAt != null
+                      ? 'Completed ${DateFormat('MMM dd, yyyy').format(assignment.completedAt!)}'
+                      : 'Completed',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
                   ),
+                ),
               ],
             ),
           ],

@@ -188,14 +188,16 @@ extension AssignmentStatusX on AssignmentStatus {
     }
   }
 
+  /// A mid-tone accent that keeps enough contrast on both light and dark
+  /// surfaces (used as text/icon color on a translucent chip of the same hue).
   Color get color {
     switch (this) {
       case AssignmentStatus.notStarted:
-        return Colors.red;
+        return const Color(0xFFE5544B); // muted red
       case AssignmentStatus.inProgress:
-        return Colors.orange;
+        return const Color(0xFFE08A2E); // muted amber
       case AssignmentStatus.done:
-        return Colors.green;
+        return const Color(0xFF3FA46A); // muted green
     }
   }
 
