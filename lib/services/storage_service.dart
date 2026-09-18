@@ -9,6 +9,11 @@ class StorageService {
   static const String _coursesKey = 'courses';
   static const String _historyAssignmentsKey = 'history_assignments';
   static const String _emailConfigKey = 'email_config';
+  static const String _historyRetentionMonthsKey = 'history_retention_months';
+
+  /// Default number of months a completed assignment stays in History
+  /// before it is automatically deleted.
+  static const int defaultHistoryRetentionMonths = 5;
 
   final SharedPreferences _prefs;
 
@@ -109,6 +114,50 @@ class StorageService {
       _historyAssignmentsKey,
       jsonEncode(history.map((a) => a.toMap()).toList()),
     );
+  }
+
+  /// How many months a completed assignment stays in History before it is
+  /// automatically deleted. A value of 0 means "keep forever".
+  Future<int> getHistoryRetentionMonths() async {
+    return _prefs.getInt(_historyRetentionMonthsKey) ??
+        defaultHistoryRetentionMonths;
+  }
+
+  Future<void> saveHistoryRetentionMonths(int months) async {
+    await _prefs.setInt(_historyRetentionMonthsKey, months);
+  }
+
+  /// Permanently removes History entries older than the configured
+  /// retention period. Safe to call often; it's a no-op when nothing has
+  /// expired or retention is disabled.
+  Future<void> purgeExpiredHistory() async {
+    final retentionMonths = await getHistoryRetentionMonths();
+    if (retentionMonths <= 0) return;
+
+    final history = await getHistoryAssignments();
+    final cutoff = _monthsAgo(retentionMonths);
+    final remaining = history.where((a) {
+      final completedAt = a.completedAt;
+      return completedAt == null || completedAt.isAfter(cutoff);
+    }).toList();
+
+    if (remaining.length != history.length) {
+      await _prefs.setString(
+        _historyAssignmentsKey,
+        jsonEncode(remaining.map((a) => a.toMap()).toList()),
+      );
+    }
+  }
+
+  DateTime _monthsAgo(int months) {
+    final now = DateTime.now();
+    var year = now.year;
+    var month = now.month - months;
+    while (month <= 0) {
+      month += 12;
+      year -= 1;
+    }
+    return DateTime(year, month, now.day, now.hour, now.minute, now.second);
   }
 
   // ========== Courses ==========

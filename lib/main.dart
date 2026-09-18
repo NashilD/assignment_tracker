@@ -122,11 +122,37 @@ class Home extends StatefulWidget {
 
 class _HomeState extends State<Home> {
   int _selectedIndex = 0;
+  final PageController _pageController = PageController();
 
   @override
   void initState() {
     super.initState();
     _checkAndMoveDoneAssignments();
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  void _onDestinationSelected(int index) {
+    setState(() => _selectedIndex = index);
+    _pageController.animateToPage(
+      index,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
+    if (index == 0) {
+      _checkAndMoveDoneAssignments();
+    }
+  }
+
+  void _onPageChanged(int index) {
+    setState(() => _selectedIndex = index);
+    if (index == 0) {
+      _checkAndMoveDoneAssignments();
+    }
   }
 
   Future<void> _checkAndMoveDoneAssignments() async {
@@ -171,15 +197,14 @@ class _HomeState extends State<Home> {
     ];
 
     return Scaffold(
-      body: screens[_selectedIndex],
+      body: PageView(
+        controller: _pageController,
+        onPageChanged: _onPageChanged,
+        children: screens,
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
-        onDestinationSelected: (index) {
-          setState(() => _selectedIndex = index);
-          if (index == 0) {
-            _checkAndMoveDoneAssignments();
-          }
-        },
+        onDestinationSelected: _onDestinationSelected,
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.assignment),

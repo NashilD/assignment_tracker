@@ -37,12 +37,21 @@ class AssignmentCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header: course name and actions
+              // Header: task type, course name and actions
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Flexible(
-                    child: _CourseChip(name: assignment.courseName, accent: accent),
+                  Expanded(
+                    child: Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        _TypeChip(taskType: assignment.taskType),
+                        _CourseChip(
+                            name: assignment.courseName, accent: accent),
+                      ],
+                    ),
                   ),
                   PopupMenuButton<String>(
                     tooltip: 'More',
@@ -123,6 +132,27 @@ class AssignmentCard extends StatelessWidget {
                     _DaysRemainingBadge(assignment: assignment),
                 ],
               ),
+              if (assignment.taskType.isExamPrep &&
+                  assignment.topics.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.checklist,
+                      size: 16,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '${assignment.topics.where((t) => t.isDone).length}/'
+                      '${assignment.topics.length} topics studied',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
               const SizedBox(height: 12),
 
               // Status control + calendar indicator
@@ -132,10 +162,14 @@ class AssignmentCard extends StatelessWidget {
                   if (onStatusChanged != null)
                     StatusSelector(
                       status: assignment.status,
+                      taskType: assignment.taskType,
                       onChanged: onStatusChanged!,
                     )
                   else
-                    StatusBadge(status: assignment.status),
+                    StatusBadge(
+                      status: assignment.status,
+                      taskType: assignment.taskType,
+                    ),
                   if (assignment.hasCalendarEvent)
                     Tooltip(
                       message: 'Synced to calendar',
@@ -233,32 +267,75 @@ class _DaysRemainingBadge extends StatelessWidget {
   }
 }
 
+/// Rounded label showing the task type (emoji + name), e.g. "📝 Test".
+class _TypeChip extends StatelessWidget {
+  final TaskType taskType;
+
+  const _TypeChip({required this.taskType});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: colorScheme.secondaryContainer,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(taskType.emoji, style: const TextStyle(fontSize: 12)),
+          const SizedBox(width: 6),
+          Text(
+            taskType.displayName,
+            style: theme.textTheme.labelLarge?.copyWith(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: colorScheme.onSecondaryContainer,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Static status badge (used where the status is not editable).
 class StatusBadge extends StatelessWidget {
   final AssignmentStatus status;
+  final TaskType taskType;
 
-  const StatusBadge({super.key, required this.status});
+  const StatusBadge({
+    super.key,
+    required this.status,
+    this.taskType = TaskType.assignment,
+  });
 
   @override
   Widget build(BuildContext context) {
     return _Pill(
       accent: status.color,
-      text: status.displayName,
+      text: status.labelFor(taskType),
       icon: status.icon,
     );
   }
 }
 
-/// Tappable status badge that lets the user change an assignment's status
-/// (Not Started / In Progress / Done) directly from the list.
+/// Tappable status badge that lets the user change a task's status (labeled
+/// Not Started / In Progress / Done for assignments, or Not Studied /
+/// Studying / Done for exam-prep tasks) directly from the list.
 class StatusSelector extends StatelessWidget {
   final AssignmentStatus status;
   final ValueChanged<AssignmentStatus> onChanged;
+  final TaskType taskType;
 
   const StatusSelector({
     super.key,
     required this.status,
     required this.onChanged,
+    this.taskType = TaskType.assignment,
   });
 
   @override
@@ -275,7 +352,7 @@ class StatusSelector extends StatelessWidget {
                 children: [
                   Icon(s.icon, size: 18, color: s.color),
                   const SizedBox(width: 8),
-                  Text(s.displayName),
+                  Text(s.labelFor(taskType)),
                   if (s == status) ...[
                     const Spacer(),
                     const Icon(Icons.check, size: 16),
@@ -287,7 +364,7 @@ class StatusSelector extends StatelessWidget {
           .toList(),
       child: _Pill(
         accent: status.color,
-        text: status.displayName,
+        text: status.labelFor(taskType),
         icon: status.icon,
         trailing: Icons.arrow_drop_down,
       ),
@@ -425,8 +502,17 @@ class HistoryCard extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Flexible(
-                  child: _CourseChip(name: assignment.courseName, accent: accent),
+                Expanded(
+                  child: Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      _TypeChip(taskType: assignment.taskType),
+                      _CourseChip(
+                          name: assignment.courseName, accent: accent),
+                    ],
+                  ),
                 ),
                 PopupMenuButton<String>(
                   tooltip: 'More',

@@ -36,6 +36,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   Future<void> _loadHistory() async {
     setState(() => _isLoading = true);
     try {
+      await widget.storageService.purgeExpiredHistory();
       final history = await widget.storageService.getHistoryAssignments();
       final courses = await widget.storageService.getCourses();
       history.sort((a, b) => (b.completedAt ?? DateTime(2000))
@@ -104,6 +105,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
         completedAt: null,
         hasCalendarEvent: false,
         calendarEventId: null,
+        taskType: assignment.taskType,
+        topics: assignment.topics.map((t) => t.copyWith()).toList(),
       );
 
       // Put it back on the calendar if it still has a due date.

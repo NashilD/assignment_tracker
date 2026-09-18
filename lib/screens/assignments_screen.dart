@@ -1,5 +1,6 @@
 import 'package:assignment_tracker/models/models.dart';
 import 'package:assignment_tracker/screens/assignment_detail_screen.dart';
+import 'package:assignment_tracker/screens/exam_prep_detail_screen.dart';
 import 'package:assignment_tracker/services/calendar_service.dart';
 import 'package:assignment_tracker/services/notification_service.dart';
 import 'package:assignment_tracker/services/storage_service.dart';
@@ -57,13 +58,23 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> {
   }
 
   Future<void> _addAssignment() async {
+    final taskType = await _pickTaskType();
+    if (taskType == null || !mounted) return;
+
     final result = await Navigator.of(context).push<Assignment>(
       MaterialPageRoute(
-        builder: (context) => AssignmentDetailScreen(
-          storageService: widget.storageService,
-          calendarService: widget.calendarService,
-          notificationService: widget.notificationService,
-        ),
+        builder: (context) => taskType == TaskType.assignment
+            ? AssignmentDetailScreen(
+                storageService: widget.storageService,
+                calendarService: widget.calendarService,
+                notificationService: widget.notificationService,
+              )
+            : ExamPrepDetailScreen(
+                storageService: widget.storageService,
+                calendarService: widget.calendarService,
+                notificationService: widget.notificationService,
+                taskType: taskType,
+              ),
       ),
     );
 
@@ -72,15 +83,70 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> {
     }
   }
 
+  /// Shows a modal bottom sheet letting the user choose which kind of task
+  /// to create: Assignment, Test, Midterm or Final Exam.
+  Future<TaskType?> _pickTaskType() {
+    return showModalBottomSheet<TaskType>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 12),
+            Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.outlineVariant,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'New Task',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+            ),
+            for (final taskType in TaskType.values)
+              ListTile(
+                leading: Text(
+                  taskType.emoji,
+                  style: const TextStyle(fontSize: 22),
+                ),
+                title: Text(taskType.displayName),
+                onTap: () => Navigator.pop(context, taskType),
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _editAssignment(Assignment assignment) async {
     final result = await Navigator.of(context).push<Assignment>(
       MaterialPageRoute(
-        builder: (context) => AssignmentDetailScreen(
-          storageService: widget.storageService,
-          calendarService: widget.calendarService,
-          notificationService: widget.notificationService,
-          assignment: assignment,
-        ),
+        builder: (context) => assignment.taskType == TaskType.assignment
+            ? AssignmentDetailScreen(
+                storageService: widget.storageService,
+                calendarService: widget.calendarService,
+                notificationService: widget.notificationService,
+                assignment: assignment,
+              )
+            : ExamPrepDetailScreen(
+                storageService: widget.storageService,
+                calendarService: widget.calendarService,
+                notificationService: widget.notificationService,
+                taskType: assignment.taskType,
+                assignment: assignment,
+              ),
       ),
     );
 
@@ -117,7 +183,7 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> {
             content: Text(
               status == AssignmentStatus.done
                   ? '"${assignment.title}" moved to History'
-                  : 'Status set to ${status.displayName}',
+                  : 'Status set to ${status.labelFor(assignment.taskType)}',
             ),
           ),
         );
@@ -180,8 +246,9 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> {
           : _assignments.isEmpty
               ? const EmptyState(
                   icon: Icons.assignment_outlined,
-                  title: 'No assignments yet',
-                  subtitle: 'Add an assignment to get started',
+                  title: 'No tasks yet',
+                  subtitle: 'Tap + to add an assignment, test, midterm or '
+                      'final exam',
                 )
               : ListView.builder(
                   padding: const EdgeInsets.symmetric(vertical: 8),
@@ -198,10 +265,10 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> {
                     );
                   },
                 ),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: FloatingActionButton(
         onPressed: _addAssignment,
-        icon: const Icon(Icons.add),
-        label: const Text('Add Assignment'),
+        tooltip: 'New Task',
+        child: const Icon(Icons.add),
       ),
     );
   }

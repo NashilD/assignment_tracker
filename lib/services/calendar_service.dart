@@ -156,6 +156,12 @@ class CalendarService {
     if (assignment.description.isNotEmpty) {
       buffer.writeln(assignment.description);
     }
+    if (assignment.taskType.isExamPrep && assignment.topics.isNotEmpty) {
+      buffer.writeln('Topics to study:');
+      for (final topic in assignment.topics) {
+        buffer.writeln('- ${topic.text}${topic.isDone ? ' (done)' : ''}');
+      }
+    }
     buffer.write('Added by Assignment Tracker');
     return buffer.toString();
   }

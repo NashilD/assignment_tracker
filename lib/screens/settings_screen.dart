@@ -1,6 +1,7 @@
 import 'package:assignment_tracker/models/models.dart';
 import 'package:assignment_tracker/services/storage_service.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:uuid/uuid.dart';
 
 /// Settings screen for managing courses, theme, and email configuration
@@ -21,8 +22,13 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  static const List<int> _retentionPresets = [1, 2, 3, 5, 6, 12, 0];
+  static const int _customRetentionOption = -1;
+  static const int _maxRetentionMonths = 120;
+
   late List<Course> _courses = [];
   late String? _emailConfig;
+  int _historyRetentionMonths = StorageService.defaultHistoryRetentionMonths;
   bool _isLoading = true;
 
   @override
@@ -35,15 +41,66 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       final courses = await widget.storageService.getCourses();
       final email = await widget.storageService.getEmailConfig();
+      final retention = await widget.storageService.getHistoryRetentionMonths();
 
       setState(() {
         _courses = courses;
         _emailConfig = email;
+        _historyRetentionMonths = retention;
       });
     } catch (e) {
       // Error loading settings
     } finally {
       setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _updateHistoryRetention(int months) async {
+    await widget.storageService.saveHistoryRetentionMonths(months);
+    setState(() => _historyRetentionMonths = months);
+  }
+
+  String _retentionLabel(int months) {
+    if (months <= 0) return 'Never';
+    if (months == 1) return '1 month';
+    return '$months months';
+  }
+
+  /// Dropdown items: the presets, plus the current value if it's a custom
+  /// number not already in the presets, plus a trailing "Custom…" entry.
+  List<DropdownMenuItem<int>> _retentionDropdownItems() {
+    final values = <int>{..._retentionPresets, _historyRetentionMonths}
+        .toList()
+      ..sort((a, b) {
+        if (a == 0) return 1;
+        if (b == 0) return -1;
+        return a.compareTo(b);
+      });
+
+    return [
+      for (final months in values)
+        DropdownMenuItem(value: months, child: Text(_retentionLabel(months))),
+      const DropdownMenuItem(
+        value: _customRetentionOption,
+        child: Text('Custom…'),
+      ),
+    ];
+  }
+
+  Future<void> _handleRetentionSelected(int value) async {
+    if (value == _customRetentionOption) {
+      final months = await showDialog<int>(
+        context: context,
+        builder: (context) => _CustomRetentionDialog(
+          initialMonths: _historyRetentionMonths,
+          maxMonths: _maxRetentionMonths,
+        ),
+      );
+      if (months != null) {
+        await _updateHistoryRetention(months);
+      }
+    } else {
+      await _updateHistoryRetention(value);
     }
   }
 
@@ -280,6 +337,66 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               );
                             },
                           ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1),
+
+                  // History retention section
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'History',
+                          style: theme.textTheme.headlineSmall,
+                        ),
+                        const SizedBox(height: 16),
+                        Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Auto-delete completed assignments',
+                                  style: theme.textTheme.titleMedium,
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Automatically remove assignments from '
+                                  'History after this much time.',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: colorScheme.onSurface
+                                        .withValues(alpha: 0.6),
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                DropdownButtonFormField<int>(
+                                  key: ValueKey(_historyRetentionMonths),
+                                  initialValue: _historyRetentionMonths,
+                                  decoration: InputDecoration(
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    contentPadding:
+                                        const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 8,
+                                    ),
+                                  ),
+                                  items: _retentionDropdownItems(),
+                                  onChanged: (value) {
+                                    if (value != null) {
+                                      _handleRetentionSelected(value);
+                                    }
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -580,6 +697,95 @@ class _EmailConfigDialogState extends State<_EmailConfigDialog> {
           onPressed: _isValidEmail(_emailController.text)
               ? () => Navigator.pop(context, _emailController.text)
               : null,
+          child: const Text('Save'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Dialog for entering a custom History retention duration, in months.
+class _CustomRetentionDialog extends StatefulWidget {
+  final int initialMonths;
+  final int maxMonths;
+
+  const _CustomRetentionDialog({
+    required this.initialMonths,
+    required this.maxMonths,
+  });
+
+  @override
+  State<_CustomRetentionDialog> createState() =>
+      _CustomRetentionDialogState();
+}
+
+class _CustomRetentionDialogState extends State<_CustomRetentionDialog> {
+  late final TextEditingController _controller;
+  String? _errorText;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(
+      text: widget.initialMonths > 0 ? '${widget.initialMonths}' : '',
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final text = _controller.text.trim();
+    final months = int.tryParse(text);
+
+    if (text.isEmpty || months == null) {
+      setState(() => _errorText = 'Enter a number of months');
+      return;
+    }
+    if (months < 1) {
+      setState(() => _errorText = 'Must be at least 1 month');
+      return;
+    }
+    if (months > widget.maxMonths) {
+      setState(
+        () => _errorText = 'Must be ${widget.maxMonths} months or fewer',
+      );
+      return;
+    }
+
+    Navigator.pop(context, months);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Custom Duration'),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        keyboardType: TextInputType.number,
+        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+        decoration: InputDecoration(
+          labelText: 'Months',
+          hintText: 'e.g. 4',
+          errorText: _errorText,
+          border: const OutlineInputBorder(),
+        ),
+        onChanged: (_) {
+          if (_errorText != null) setState(() => _errorText = null);
+        },
+        onSubmitted: (_) => _submit(),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _submit,
           child: const Text('Save'),
         ),
       ],
