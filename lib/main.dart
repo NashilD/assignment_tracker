@@ -77,6 +77,7 @@ class _MyAppState extends State<MyApp> {
     if (!_isInitialized) {
       return MaterialApp(
         title: 'Assignment Tracker',
+        debugShowCheckedModeBanner: false,
         theme: AppTheme.getLightTheme(),
         darkTheme: AppTheme.getDarkTheme(),
         home: const Scaffold(
@@ -87,6 +88,7 @@ class _MyAppState extends State<MyApp> {
 
     return MaterialApp(
       title: 'Assignment Tracker',
+      debugShowCheckedModeBanner: false,
       theme: AppTheme.getLightTheme(),
       darkTheme: AppTheme.getDarkTheme(),
       themeMode: _themeMode,
@@ -164,8 +166,7 @@ class _HomeState extends State<Home> {
             await widget.calendarService
                 .deleteEvent(assignment.calendarEventId!);
           }
-          await widget.notificationService
-              .cancelForAssignmentId(assignment.id);
+          await widget.notificationService.cancelForAssignmentId(assignment.id);
           await widget.storageService.moveToHistory(assignment);
         }
       }

@@ -122,35 +122,12 @@ class _ExamPrepDetailScreenState extends State<ExamPrepDetailScreen> {
   }
 
   Future<void> _editTopic(StudyTopic topic) async {
-    final controller = TextEditingController(text: topic.text);
     final result = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Edit Topic'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: InputDecoration(
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
+      builder: (context) => _TopicEditDialog(initialText: topic.text),
     );
-    controller.dispose();
 
-    if (result != null && result.isNotEmpty) {
+    if (result != null && result.isNotEmpty && mounted) {
       setState(() => topic.text = result);
     }
   }
@@ -506,6 +483,63 @@ class _ExamPrepDetailScreenState extends State<ExamPrepDetailScreen> {
                 ],
               ),
             ),
+    );
+  }
+}
+
+/// Dialog for editing a study topic's text. A dedicated [StatefulWidget] so
+/// its [TextEditingController] is owned by the dialog's own element and
+/// disposed by Flutter only once that element actually unmounts (after its
+/// exit animation), instead of being disposed by the caller the instant
+/// `showDialog` returns — which raced the dialog's fade-out animation and
+/// crashed the framework.
+class _TopicEditDialog extends StatefulWidget {
+  final String initialText;
+
+  const _TopicEditDialog({required this.initialText});
+
+  @override
+  State<_TopicEditDialog> createState() => _TopicEditDialogState();
+}
+
+class _TopicEditDialogState extends State<_TopicEditDialog> {
+  late TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialText);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Edit Topic'),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        decoration: InputDecoration(
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: () => Navigator.pop(context, _controller.text.trim()),
+          child: const Text('Save'),
+        ),
+      ],
     );
   }
 }

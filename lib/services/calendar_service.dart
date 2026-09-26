@@ -122,7 +122,7 @@ class CalendarService {
       final event = Event(
         _calendarId,
         eventId: existingEventId,
-        title: assignment.title.isEmpty ? 'Assignment' : assignment.title,
+        title: _buildTitle(assignment),
         description: _buildDescription(assignment),
         start: start,
         end: end,
@@ -145,6 +145,16 @@ class CalendarService {
       debugPrint('CalendarService._upsertEvent failed: $e');
       return null;
     }
+  }
+
+  /// The calendar event's title: "`Course - Title`" so the entry is
+  /// identifiable in the device calendar without opening it, falling back to
+  /// just the title when there's no real course attached.
+  String _buildTitle(Assignment assignment) {
+    final title = assignment.title.isEmpty ? 'Assignment' : assignment.title;
+    final course = assignment.courseName;
+    if (course.isEmpty || course == 'Unknown') return title;
+    return '$course - $title';
   }
 
   String _buildDescription(Assignment assignment) {
